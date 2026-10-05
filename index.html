@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Hexapod Rescue Robot</title>
+<meta name="description" content="Hexapod: a six-legged search-and-rescue robot that goes into collapsed buildings before rescuers do. Smart India Hackathon 2026, PS SIH26218, Team Scammers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js"></script>
+<style>
+/* Layout: one long pinned scroll sequence (a sticky full-screen stage) that plays a camera flight round the robot,
+   then wipes to a tactical map; chapter title top-left, story bottom-left, telemetry bottom-right, chapter name in
+   the nav. After it, ordinary sections. A single dark look, by choice. */
+:root {
+  --bg: #06070a;
+  --bg-2: #0d1014;
+  --fg: #ffffff;
+  --w80: rgba(255, 255, 255, .8);
+  --w60: rgba(255, 255, 255, .6);
+  --w40: rgba(255, 255, 255, .4);
+  --w25: rgba(255, 255, 255, .25);
+  --w15: rgba(255, 255, 255, .15);
+  --w08: rgba(255, 255, 255, .08);
+  --heat: #ffcb47;
+  --alert: #ff6666;
+  --scan: #7aebff;
+  --sans: "Geist", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --pad: clamp(16px, 2.2vw, 32px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+img, video { display: block; max-width: 100%; height: auto; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--heat); outline-offset: 3px; }
+.mono { font-family: var(--mono); }
+.cap { font: 500 10.5px/1.5 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+
+/* nav */
+.nav { position: fixed; top: 0; left: 0; right: 0; z-index: 30; height: 56px; padding: env(safe-area-inset-top, 0px) var(--pad) 0;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; pointer-events: none; }
+.nav > * { pointer-events: auto; }
+.logo { font: 650 19px/1 var(--sans); letter-spacing: -.03em; display: inline-flex; align-items: center; gap: 8px; }
+.logo svg { width: 18px; height: 18px; }
+.chapter { display: flex; align-items: center; gap: 14px; color: var(--w60); }
+.chapter i { width: 90px; height: 1px; background-image: radial-gradient(circle, var(--w40) 1px, transparent 1.2px); background-size: 8px 1px; }
+.chapter span { min-width: 120px; text-align: center; transition: opacity .3s; }
+.nav-r { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.pill { display: inline-flex; align-items: center; gap: 10px; height: 30px; padding: 0 14px; border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--w15); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); font: 500 12px/1 var(--sans); letter-spacing: -.01em; white-space: nowrap; transition: background .2s; }
+.pill:hover { background: var(--w25); }
+.pill .ic { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--w15); font-size: 10px; }
+.burger { width: 30px; height: 30px; display: grid; place-content: center; gap: 4px; background: none; border: 0; cursor: pointer; }
+.burger span { display: block; width: 16px; height: 1.5px; background: var(--fg); transition: transform .25s; }
+.burger[aria-expanded="true"] span:first-child { transform: translateY(2.75px) rotate(45deg); }
+.burger[aria-expanded="true"] span:last-child { transform: translateY(-2.75px) rotate(-45deg); }
+@media (max-width: 720px) { .chapter i { width: 22px; } .chapter span { min-width: 0; } .nav-r .pill { display: none; } }
+
+/* menu + references overlays */
+.sheet { position: fixed; inset: 0; z-index: 25; background: rgba(6, 7, 10, .92); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  padding: calc(84px + env(safe-area-inset-top, 0px)) var(--pad) 40px; overflow-y: auto; }
+.sheet ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px 32px; max-width: 1200px; }
+.sheet li a { display: flex; gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--w08); font: 500 22px/1.2 var(--sans); letter-spacing: -.03em; }
+.sheet li a small { font: 500 10px/1 var(--mono); color: var(--w40); letter-spacing: .08em; min-width: 22px; }
+.sheet li a:hover { color: var(--heat); }
+.sheet h2 { font: 500 28px/1.1 var(--sans); letter-spacing: -.04em; margin: 36px 0 14px; }
+.refs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 32px; max-width: 1200px; }
+.refs a { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--w08); }
+.refs a b { font: 500 17px/1.25 var(--sans); letter-spacing: -.02em; }
+.refs a span { color: var(--w60); font-size: 14px; }
+.refs a:hover b { color: var(--heat); }
+
+/* pinned sequence */
+.seq { position: relative; height: 3000vh; }
+.stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; background: var(--bg); }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.vig { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 45%, rgba(6, 7, 10, .55) 78%, rgba(6, 7, 10, .9) 100%),
+              linear-gradient(180deg, rgba(6, 7, 10, .55) 0, transparent 18%, transparent 70%, rgba(6, 7, 10, .7) 100%); }
+.lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.lines text { font: 500 13px var(--sans); fill: var(--fg); letter-spacing: -.01em; }
+.lines text.sub { font: 500 10px var(--mono); fill: var(--w60); letter-spacing: .08em; text-transform: uppercase; }
+.ch { position: absolute; inset: 0; pointer-events: none; }
+.ch .t { position: absolute; left: var(--pad); top: calc(64px + env(safe-area-inset-top, 0px)); margin: 0; max-width: min(620px, 92vw);
+  font: 500 clamp(34px, 3.6vw, 52px)/1.02 var(--sans); letter-spacing: -.045em; text-wrap: balance; }
+.ch .t.big { font-size: clamp(42px, 4.6vw, 68px); max-width: min(720px, 92vw); }
+.ch .b { position: absolute; left: var(--pad); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); max-width: min(400px, 88vw);
+  font: 400 15px/1.35 var(--sans); letter-spacing: -.01em; color: var(--fg); text-wrap: pretty; }
+.ch .b.right { left: auto; right: var(--pad); }
+.ch .b.mid { left: 48%; bottom: auto; top: calc(70px + env(safe-area-inset-top, 0px)); max-width: min(440px, 46vw); }
+.ch .pill { pointer-events: auto; margin-top: 14px; }
+.ch .t, .ch .b, .ch .extra { opacity: 0; transform: translateY(14px); filter: blur(8px); will-change: opacity, transform, filter; }
+.spec { margin-top: 16px; display: grid; border-top: 1px solid var(--w15); }
+.spec div { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--w15); font-size: 12px; }
+.spec div span:first-child { color: var(--fg); font-weight: 500; }
+.spec div span:last-child { color: var(--w60); }
+@media (max-width: 720px) { .ch .b.mid { left: var(--pad); top: auto; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); max-width: 88vw; } .ch .b.right { left: var(--pad); right: auto; } }
+.hud { position: absolute; right: var(--pad); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); text-align: right; color: var(--w60);
+  font: 500 10px/1.65 var(--mono); letter-spacing: .06em; text-transform: uppercase; white-space: pre; pointer-events: none; }
+.hud .y { color: var(--heat); } .hud .r { color: var(--alert); } .hud .c { color: var(--scan); }
+.simtag { position: absolute; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); color: var(--w40); pointer-events: none; transition: opacity .4s; }
+@media (max-width: 720px) { .hud { display: none; } .simtag { display: none; } }
+.det { position: absolute; left: 0; top: 0; pointer-events: none; border: 1.5px solid var(--heat); opacity: 0; }
+.det .chip { position: absolute; left: -1.5px; bottom: calc(100% + 4px); background: var(--heat); color: #120d00; padding: 2px 6px; white-space: nowrap; }
+.det .votes { position: absolute; left: -1.5px; top: calc(100% + 5px); display: flex; gap: 3px; }
+.det .votes i { width: 9px; height: 9px; border: 1px solid var(--heat); }
+.det .votes i.on { background: var(--heat); }
+.therm { position: absolute; right: 9%; top: 19%; width: min(240px, 34vw); aspect-ratio: 4 / 3; border: 1px solid var(--w40); background: #000; opacity: 0; pointer-events: none; }
+.therm canvas { width: 100%; height: 100%; display: block; }
+.therm .chip { position: absolute; left: -1px; bottom: calc(100% + 4px); background: var(--alert); color: #1a0000; padding: 2px 6px; }
+.say { position: absolute; left: 0; top: 0; max-width: min(360px, 70vw); padding: 10px 12px; background: rgba(6, 7, 10, .72); border: 1px solid var(--w25);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); font: 500 11px/1.5 var(--mono); letter-spacing: .06em; text-transform: uppercase; opacity: 0; pointer-events: none; }
+.say::before { content: "SPEAKER · ENGAGE"; display: block; color: var(--heat); margin-bottom: 4px; }
+
+/* tactical map (second half of the sequence) */
+.map { position: absolute; inset: 0; background: #0b0d10; clip-path: polygon(100% 0, 100% 0, 100% 0, 100% 0); }
+.plane { position: absolute; left: 50%; top: 55%; width: 1600px; height: 1000px; margin: -500px 0 0 -800px; transform-origin: 50% 50%; }
+.plane svg { width: 100%; height: 100%; overflow: visible; }
+.chiptxt { font: 500 14px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.pulse { animation: pulse 2.2s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes pulse { from { transform: scale(.5); opacity: .9; } to { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; opacity: .4; } }
+
+/* sections after the sequence */
+.sec { padding: clamp(96px, 14vw, 200px) var(--pad) 0; max-width: 1440px; margin: 0 auto; }
+.sec h2 { margin: 0; font: 500 clamp(30px, 3.2vw, 46px)/1.04 var(--sans); letter-spacing: -.045em; text-wrap: balance; }
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity .9s cubic-bezier(.2, .7, .2, 1), transform .9s cubic-bezier(.2, .7, .2, 1); }
+.reveal.in { opacity: 1; transform: none; }
+.no-js .reveal, .still .reveal { opacity: 1; transform: none; }
+.cards { margin-top: 28px; display: flex; gap: 10px; height: clamp(360px, 38vw, 520px); }
+.card { position: relative; flex: 1 1 0; min-width: 0; border-radius: 6px; overflow: hidden; background: var(--bg-2); transition: flex-grow .7s cubic-bezier(.2, .7, .2, 1); cursor: pointer; }
+.card.open { flex-grow: 2.6; }
+.card img, .card canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(6, 7, 10, .88) 100%); }
+.card .txt { position: absolute; left: 22px; right: 22px; bottom: 22px; z-index: 1; display: grid; gap: 8px; }
+.card h3 { margin: 0; font: 500 20px/1.15 var(--sans); letter-spacing: -.03em; }
+.card p { margin: 0; color: var(--w80); font-size: 13.5px; max-width: 46ch; opacity: 0; transform: translateY(8px); transition: opacity .5s .15s, transform .5s .15s; }
+.card .src { color: var(--w40); opacity: 0; transition: opacity .5s .2s; }
+.card.open p, .card.open .src { opacity: 1; transform: none; }
+.card .src:hover { color: var(--heat); }
+@media (max-width: 760px) { .cards { flex-direction: column; height: auto; } .card { height: 300px; flex: none; } .card p, .card .src { opacity: 1; transform: none; } }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); align-items: center; }
+.field h2 { font-size: clamp(32px, 3.6vw, 54px); }
+.feed { position: relative; justify-self: center; width: min(100%, 380px); }
+.feed video { width: 100%; aspect-ratio: 478 / 850; object-fit: cover; border-radius: 4px; }
+.feed .lab { position: absolute; display: flex; align-items: center; gap: 10px; white-space: nowrap; color: var(--scan); }
+.feed .lab::before { content: ""; width: 54px; height: 1px; background: var(--scan); opacity: .6; }
+.feed .lab.l { flex-direction: row-reverse; }
+.feed .l1 { left: 62%; top: 22%; } .feed .l2 { right: 70%; top: 48%; } .feed .l3 { left: 58%; top: 76%; }
+@media (max-width: 860px) { .field { grid-template-columns: minmax(0, 1fr); } .feed .lab { display: none; } }
+.fdates { margin: 14px 0 0; color: var(--w60); max-width: 52ch; }
+.stills { margin-top: 22px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-width: 560px; }
+.stills figure { margin: 0; display: grid; gap: 6px; }
+.stills img { width: 100%; aspect-ratio: 478 / 850; object-fit: cover; border-radius: 3px; }
+.stills figcaption { color: var(--w40); }
+.cta { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); align-items: center; }
+.cta .pic { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 6px; }
+.cta .pic img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.08); transition: transform 1.6s cubic-bezier(.2, .7, .2, 1); }
+.cta .pic.in img { transform: scale(1); }
+.cta p { color: var(--w80); margin: 14px 0 18px; max-width: 42ch; }
+.cta .row { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 860px) { .cta { grid-template-columns: minmax(0, 1fr); } }
+.marks { text-align: center; }
+.marks .grid { margin: 0 auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 18px 46px; max-width: 900px; }
+.marks .grid span { font: 600 18px/1 var(--sans); letter-spacing: .02em; color: var(--w80); text-transform: uppercase; }
+.marks .grid span:nth-child(3n+2) { font-family: var(--mono); font-weight: 500; letter-spacing: .14em; font-size: 15px; }
+.marks p { margin: 30px auto 0; max-width: 560px; color: var(--w60); font-size: 13px; }
+.end { position: relative; margin-top: clamp(80px, 12vw, 160px); min-height: 100vh; min-height: 100svh; overflow: hidden; display: grid; align-items: end; }
+.end .word { position: absolute; left: 50%; top: 4%; transform: translateX(-50%); width: 100%; text-align: center; white-space: nowrap;
+  font: 700 clamp(80px, 21vw, 340px)/1 var(--sans); letter-spacing: -.06em; color: transparent; -webkit-text-stroke: 1px rgba(255, 255, 255, .09);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0) 80%); -webkit-background-clip: text; background-clip: text; }
+.end .bot { position: absolute; left: 50%; top: 9%; width: min(700px, 86vw); transform: translateX(-50%); }
+.end .bot img { width: 100%; filter: drop-shadow(0 40px 60px rgba(0, 0, 0, .8)); }
+.end .bar { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 16px; padding: 0 var(--pad) calc(22px + env(safe-area-inset-bottom, 0px)); }
+.end .bar h3 { margin: 0 0 12px; font: 500 22px/1.1 var(--sans); letter-spacing: -.03em; }
+.end .bar small { color: var(--w25); }
+.end .links { justify-self: end; display: flex; gap: 18px; font-size: 11px; color: var(--w60); }
+.end .links a, .end .links button { text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; cursor: pointer; padding: 0; font-size: 11px; color: var(--w60); }
+@media (max-width: 720px) { .end .bar { grid-template-columns: 1fr; } .end .links { justify-self: start; } }
+
+/* pinned sub-sections: system and app */
+.pin { position: relative; }
+.pin > .inner { position: sticky; top: 0; height: 100vh; height: 100svh; max-width: 1440px; margin: 0 auto; padding: calc(76px + env(safe-area-inset-top, 0px)) var(--pad) 28px; }
+#system { height: 420vh; margin-top: clamp(80px, 10vw, 140px); }
+#app { height: 460vh; margin-top: clamp(80px, 10vw, 140px); }
+.sys { display: grid; grid-template-rows: auto 1fr auto; gap: 28px; }
+.sys-head { display: grid; gap: 10px; max-width: 760px; }
+.sys-head h2, .app-copy h2, .robot h2 { margin: 0; font: 500 clamp(30px, 3.2vw, 46px)/1.04 var(--sans); letter-spacing: -.045em; text-wrap: balance; }
+.sys-head .sub { margin: 0; color: var(--w60); }
+.flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; align-content: center; }
+.node { position: relative; border: 1px solid var(--w15); border-radius: 6px; padding: 16px 14px 18px; display: grid; gap: 10px; align-content: start; min-width: 0;
+  background: rgba(255, 255, 255, .02); opacity: .22; transform: translateY(12px); transition: opacity .6s, transform .6s, border-color .4s, background .4s; }
+.node.on { opacity: 1; transform: none; border-color: var(--w40); }
+.node.cur { border-color: var(--heat); background: rgba(255, 203, 71, .06); }
+.node:not(:last-child)::after { content: ""; position: absolute; top: 28px; right: -17px; width: 18px; height: 1px; background: var(--w25); }
+.node.on:not(:last-child)::after { background: var(--heat); }
+.node .n { color: var(--heat); }
+.node h3 { margin: 0; font: 500 18px/1.15 var(--sans); letter-spacing: -.03em; }
+.node ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; color: var(--w60); font: 400 13px/1.35 var(--sans); letter-spacing: -.005em; }
+.node ul li::before { content: "— "; color: var(--w25); }
+.sys-cap { margin: 0; font: 500 clamp(18px, 1.6vw, 22px)/1.3 var(--sans); letter-spacing: -.02em; color: var(--w80); min-height: 2.6em; max-width: 900px; }
+.sys-cap b { color: var(--heat); font-weight: 500; }
+@media (max-width: 1000px) { .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); } .node:nth-child(3n)::after { display: none; } }
+@media (max-width: 640px) { #system { height: auto; } #system .inner { position: static; height: auto; } .flow { grid-template-columns: minmax(0, 1fr); } .node { opacity: 1; transform: none; } .node::after { display: none; } }
+
+.robot .protos { margin-top: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.robot figure { margin: 0; display: grid; gap: 12px; }
+.robot .protos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; background: var(--bg-2); }
+.robot figcaption { display: grid; gap: 4px; }
+.robot figcaption span:last-child { color: var(--w80); }
+.build-head { margin-top: clamp(48px, 6vw, 80px); display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+.build-head h3 { margin: 0; font: 500 24px/1.1 var(--sans); letter-spacing: -.03em; }
+.build-head p { margin: 0; color: var(--w60); }
+.gallery { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.gallery button { position: relative; padding: 0; border: 0; border-radius: 6px; overflow: hidden; background: var(--bg-2); cursor: zoom-in; text-align: left; aspect-ratio: 16 / 10; }
+.gallery img { width: 100%; height: 100%; object-fit: cover; transition: transform .8s cubic-bezier(.2, .7, .2, 1); }
+.gallery button:hover img { transform: scale(1.04); }
+.gallery span { position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 14px 12px; font-size: 13px; line-height: 1.35; color: var(--fg);
+  background: linear-gradient(180deg, transparent, rgba(6, 7, 10, .85)); }
+@media (max-width: 760px) { .robot .protos, .gallery { grid-template-columns: minmax(0, 1fr); } }
+.lb { max-width: min(1200px, 94vw); width: 100%; padding: 0; border: 1px solid var(--w15); border-radius: 8px; background: var(--bg); color: var(--fg); }
+.lb::backdrop { background: rgba(6, 7, 10, .85); }
+.lb img { width: 100%; max-height: 78vh; object-fit: contain; background: #000; }
+.lb p { margin: 0; padding: 12px 16px; color: var(--w80); text-transform: none; letter-spacing: .02em; font-size: 12px; }
+.lb .pill { position: absolute; right: 10px; top: 10px; }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(24px, 5vw, 80px); align-items: center; }
+.app-copy { display: grid; gap: 18px; max-width: 560px; }
+.apptabs { display: grid; border-top: 1px solid var(--w15); }
+.apptabs button { display: grid; gap: 4px; text-align: left; padding: 14px 0; background: none; border: 0; border-bottom: 1px solid var(--w15); cursor: pointer; opacity: .4; transition: opacity .4s; }
+.apptabs button b { font: 500 20px/1.1 var(--sans); letter-spacing: -.03em; }
+.apptabs button span { color: var(--w80); font-size: 14px; max-height: 0; overflow: hidden; transition: max-height .5s; }
+.apptabs button[aria-selected="true"] { opacity: 1; }
+.apptabs button[aria-selected="true"] span { max-height: 120px; }
+.note { color: var(--w40); margin: 0; }
+.phone { width: min(340px, 84vw); height: min(690px, calc(100svh - 120px)); border: 1px solid var(--w25); border-radius: 36px; background: #0b0d10; padding: 14px 12px 10px;
+  display: grid; grid-template-rows: auto 1fr auto; gap: 10px; box-shadow: 0 40px 120px rgba(0, 0, 0, .6); }
+.phone header { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 0; }
+.phone header b { font: 650 15px/1 var(--sans); letter-spacing: -.02em; }
+.ok { color: var(--scan); }
+.screens { position: relative; overflow: hidden; }
+.scr { position: absolute; inset: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; opacity: 0; transform: translateX(16px); transition: opacity .45s, transform .45s; pointer-events: none; scrollbar-width: none; }
+.scr.on { opacity: 1; transform: none; pointer-events: auto; }
+.pc { border: 1px solid var(--w15); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; background: rgba(255, 255, 255, .025); }
+.pc small { color: var(--w40); }
+.pc.hit { border-color: rgba(255, 102, 102, .7); background: rgba(255, 102, 102, .08); }
+.pc .big { font: 600 18px/1.1 var(--sans); letter-spacing: -.02em; color: var(--alert); }
+.kv { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font: 400 11.5px/1.4 var(--mono); }
+.kv dt { color: var(--w40); }
+.kv dd { margin: 0; text-align: right; color: var(--fg); }
+.okline { font: 500 12px var(--sans); color: var(--scan); }
+.gas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.gas div { border: 1px solid var(--w08); border-radius: 8px; padding: 6px 8px; display: grid; gap: 3px; min-width: 0; }
+.gas small { font: 500 9px/1.2 var(--mono); letter-spacing: .06em; color: var(--w40); text-transform: uppercase; }
+.gas b { font: 500 15px/1 var(--sans); }
+.gas b u { text-decoration: none; font-size: 10px; color: var(--w60); margin-left: 3px; }
+.gas i { display: block; height: 3px; border-radius: 2px; background: var(--w08); overflow: hidden; }
+.gas i em { display: block; height: 100%; background: var(--scan); }
+.gas em.w { background: var(--heat); } .gas em.d { background: var(--alert); }
+.gas span { font: 400 9px/1.2 var(--mono); color: var(--w40); }
+.tview { position: relative; border-radius: 8px; overflow: hidden; }
+.tview canvas { width: 100%; display: block; aspect-ratio: 4 / 3; }
+.tview .pbox { position: absolute; left: 34%; top: 24%; width: 34%; height: 56%; border: 1.5px solid #fff; }
+.tview .pbox i { position: absolute; left: -1.5px; bottom: 100%; font-style: normal; background: #fff; color: #000; padding: 2px 5px; white-space: nowrap; }
+.tview .rec { position: absolute; right: 8px; top: 8px; color: var(--alert); }
+.dim { color: var(--w40); margin: 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 5px; }
+.btns span, .btns button { font: 500 10.5px/1 var(--sans); padding: 7px 9px; border-radius: 999px; background: var(--w08); border: 0; color: var(--fg); cursor: default; }
+.btns button { cursor: pointer; }
+.btns button:hover { background: var(--w15); }
+.lmap { width: 100%; aspect-ratio: 1; display: block; border-radius: 8px; background: #06070a; }
+.thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.thumbs img, .thumbs canvas { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; display: block; }
+.vrow { display: block; font: 500 12px/1.4 var(--sans); padding: 4px 0; color: var(--fg); }
+a.vrow:hover { color: var(--heat); }
+.tabbar { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--w08); padding-top: 6px; }
+.tabbar button { background: none; border: 0; padding: 8px 0; font: 500 9.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--w40); cursor: pointer; }
+.tabbar button.on { color: var(--heat); }
+@media (max-width: 860px) { #app { height: auto; } #app .inner { position: static; height: auto; } .app { grid-template-columns: minmax(0, 1fr); justify-items: center; } .app-copy { max-width: none; justify-self: stretch; }
+  .apptabs button { opacity: 1; } .apptabs button span { max-height: none; } .phone { height: 640px; } }
+</style>
+
+<header class="nav">
+  <a class="logo" href="#top" aria-label="Hexapod, back to the start">
+    <svg viewBox="0 0 18 18" aria-hidden="true"><polygon points="9,1 16,5 16,13 9,17 2,13 2,5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>Hexapod</a>
+  <div class="chapter cap" aria-live="polite"><i></i><span id="chap">Intro</span><i></i></div>
+  <div class="nav-r">
+    <a class="pill" href="https://www.youtube.com/watch?v=SoxI9WaMbTk" target="_blank" rel="noopener">Watch video</a>
+    <button class="burger" id="burger" aria-label="Open the chapter menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+  </div>
+</header>
+
+<nav class="sheet" id="menu" hidden aria-label="Chapters">
+  <ol id="menulist"></ol>
+  <h2>On this page</h2>
+  <ol>
+    <li><a href="#missions" data-close><small>A</small>Missions</a></li>
+    <li><a href="#system" data-close><small>B</small>System</a></li>
+    <li><a href="#robot" data-close><small>C</small>The robot</a></li>
+    <li><a href="#app" data-close><small>D</small>Rescue app</a></li>
+    <li><a href="#field" data-close><small>E</small>Field test</a></li>
+    <li><a href="#walk" data-close><small>F</small>See it walk</a></li>
+    <li><a href="#refs-open" data-refs><small>G</small>References</a></li>
+  </ol>
+</nav>
+
+<aside class="sheet" id="refs" hidden aria-label="References">
+  <button class="pill" id="refs-close" type="button" style="position:fixed;right:var(--pad);top:calc(70px + env(safe-area-inset-top, 0px))">Close <span class="ic">✕</span></button>
+  <h2 style="margin-top:0">Why it is needed</h2>
+  <div class="refs">
+    <a href="https://indianexpress.com/article/cities/mumbai/38-hr-op-lives-saved-despite-narrow-lanes-unstable-structures-10217451/" target="_blank" rel="noopener"><span class="cap">2025 · The Indian Express</span><b>Virar building collapse ↗</b><span>Narrow lanes kept heavy machinery out; the operation ran 38 hours. Need: compact reconnaissance.</span></a>
+    <a href="https://indianexpress.com/article/cities/hyderabad/drones-sonars-robots-and-11-agencies-on-the-job-as-clock-ticks-on-telangana-tunnel-rescue-9856348/" target="_blank" rel="noopener"><span class="cap">2025 · The Indian Express</span><b>Telangana tunnel rescue ↗</b><span>Drones, sonar and robots in a difficult tunnel search. Need: remote sensing in confined spaces.</span></a>
+    <a href="https://indianexpress.com/article/india/kerala-sanitation-worker-canal-search-scuba-divers-robots-9452714/lite/" target="_blank" rel="noopener"><span class="cap">2024 · The Indian Express</span><b>Kerala canal search ↗</b><span>NDRF used robotic equipment in a hazardous tunnel search. Need: remote operation in hazardous spaces.</span></a>
+  </div>
+  <h2>Research we built on</h2>
+  <div class="refs">
+    <a href="https://link.springer.com/article/10.1007/s42452-026-08418-2" target="_blank" rel="noopener"><span class="cap">2026 · Springer Nature</span><b>Hexapod disaster response ↗</b><span>LiDAR, thermal and gas sensing on a hexapod rescue robot.</span></a>
+    <a href="https://www.research.ed.ac.uk/en/publications/gait-and-trajectory-rolling-planning-and-control-of-hexapod-robot/" target="_blank" rel="noopener"><span class="cap">Gait planning</span><b>Hexapod gait and trajectory control ↗</b><span>Stable gait planning for hexapods on uneven ground.</span></a>
+    <a href="https://ieeexplore.ieee.org/document/11135872" target="_blank" rel="noopener"><span class="cap">2025 · IEEE Xplore</span><b>RescueBot thermal detection ↗</b><span>A hexapod with thermal imaging for finding people in low visibility.</span></a>
+  </div>
+  <h2>Project</h2>
+  <div class="refs">
+    <a href="https://www.youtube.com/watch?v=SoxI9WaMbTk" target="_blank" rel="noopener"><span class="cap">YouTube</span><b>HexaPod:SAR video ↗</b><span>The team's three-minute project video.</span></a>
+    <a href="https://github.com/TANMAY0311/ROBOSIDER-HEXAPOD-3D" target="_blank" rel="noopener"><span class="cap">GitHub</span><b>3D model and simulation ↗</b><span>The MuJoCo model of the robot used for every render on this page.</span></a>
+  </div>
+</aside>
+
+<main id="top">
+  <div class="seq" id="seq">
+    <div class="stage">
+      <canvas id="cv" aria-label="3D render of the six-legged robot on a rubble field"></canvas>
+      <div class="vig" aria-hidden="true"></div>
+
+      <div class="map" id="map" aria-hidden="true">
+        <div class="plane" id="plane">
+          <svg viewBox="0 0 1600 1000">
+            <defs>
+              <pattern id="g1" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="rgba(255,255,255,.05)"/></pattern>
+              <pattern id="g2" width="200" height="200" patternUnits="userSpaceOnUse"><path d="M200 0H0V200" fill="none" stroke="rgba(255,255,255,.09)"/><circle cx="0" cy="0" r="1.6" fill="rgba(255,255,255,.25)"/></pattern>
+              <radialGradient id="gy"><stop offset="0" stop-color="#fff3c4"/><stop offset=".25" stop-color="#ffcb47"/><stop offset="1" stop-color="#ffcb47" stop-opacity="0"/></radialGradient>
+              <radialGradient id="gr"><stop offset="0" stop-color="#ffd6d6"/><stop offset=".25" stop-color="#ff6666"/><stop offset="1" stop-color="#ff6666" stop-opacity="0"/></radialGradient>
+              <radialGradient id="gc"><stop offset="0" stop-color="#e3fbff"/><stop offset=".25" stop-color="#7aebff"/><stop offset="1" stop-color="#7aebff" stop-opacity="0"/></radialGradient>
+              <radialGradient id="gw"><stop offset="0" stop-color="#ffffff" stop-opacity=".5"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+            </defs>
+            <rect x="-1600" y="-1000" width="4800" height="3000" fill="url(#g1)"/>
+            <rect x="-1600" y="-1000" width="4800" height="3000" fill="url(#g2)"/>
+            <path id="area" d="M520 300 L640 250 L760 278 L880 236 L1010 262 L1120 330 L1150 450 L1110 560 L1140 650 L1060 740 L930 760 L820 720 L700 770 L590 730 L520 640 L545 540 L500 450 Z"
+              fill="rgba(255,255,255,.035)" stroke="rgba(255,255,255,.85)" stroke-width="2.2" stroke-linejoin="round"/>
+            <g fill="rgba(255,255,255,.07)" stroke="rgba(255,255,255,.18)">
+              <path d="M600 330 L680 310 L700 360 L620 380 Z"/><path d="M820 600 L900 580 L930 640 L850 660 Z"/><path d="M1000 600 L1060 590 L1070 650 L1010 660 Z"/>
+              <path d="M690 470 L760 450 L790 500 L720 520 Z"/>
+            </g>
+            <g stroke="rgba(255,255,255,.22)" stroke-dasharray="6 8" fill="none"><path d="M560 520 L760 520"/><path d="M820 300 L820 470"/><path d="M880 520 L1100 520"/></g>
+            <g id="gas" opacity="0"><circle cx="650" cy="430" r="70" fill="url(#gr)"/><circle class="pulse" cx="650" cy="430" r="24" fill="none" stroke="#ff6666"/>
+              <g transform="translate(600 352)"><rect width="160" height="28" fill="rgba(255,102,102,.18)" stroke="#ff6666"/><text class="chiptxt" x="12" y="19" fill="#ff6666">Gas detected</text></g></g>
+            <g id="false" opacity="0"><circle cx="700" cy="560" r="44" fill="url(#gw)"/><g transform="translate(650 494)"><rect width="185" height="28" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.5)"/><text class="chiptxt" x="12" y="19" fill="rgba(255,255,255,.7)">False alarm</text></g></g>
+            <g id="surv" opacity="0"><circle cx="980" cy="410" r="80" fill="url(#gy)"/><circle class="pulse" cx="980" cy="410" r="26" fill="none" stroke="#ffcb47"/>
+              <g transform="translate(925 318)"><rect id="survbox" width="238" height="28" fill="rgba(255,203,71,.16)" stroke="#ffcb47"/><text id="survtxt" class="chiptxt" x="12" y="19" fill="#ffcb47">Survivor · confirmed</text></g></g>
+            <g id="label-area"><g transform="translate(520 262)"><rect width="158" height="28" fill="rgba(255,203,71,.16)" stroke="#ffcb47"/><circle cx="14" cy="14" r="5" fill="#ffcb47"/><text class="chiptxt" x="26" y="19" fill="#ffcb47">Search area</text></g></g>
+            <g id="entry" opacity="0"><g transform="translate(510 784)"><rect width="152" height="28" fill="rgba(122,235,255,.12)" stroke="#7aebff"/><text class="chiptxt" x="12" y="19" fill="#7aebff">Entry point</text></g><circle cx="572" cy="760" r="7" fill="#7aebff"/></g>
+            <path id="patrol" d="M575 745 L640 690 L700 650 L760 610 L830 560 L880 500 L930 450" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="4 6"/>
+            <g id="rings" opacity="0"><circle class="pulse" cx="760" cy="610" r="22" fill="none" stroke="rgba(255,255,255,.7)"/><circle class="pulse" cx="880" cy="500" r="22" fill="none" stroke="rgba(255,255,255,.7)" style="animation-delay:-1.1s"/></g>
+            <g id="maprobot"><polygon points="0,-16 11,12 0,6 -11,12" fill="#fff"/></g>
+            <g id="resp" opacity="0" font-family="Geist Mono, monospace">
+              <g stroke="#7aebff" stroke-dasharray="5 7" fill="none" opacity=".6"><path d="M980 410 L1330 220"/><path d="M980 410 L1380 640"/><path d="M980 410 L300 210"/><path d="M980 410 L250 690"/></g>
+              <g fill="#7aebff"><polygon points="1330,214 1340,226 1320,226"/><polygon points="1380,634 1390,646 1370,646"/><polygon points="300,204 310,216 290,216"/><polygon points="250,684 260,696 240,696"/></g>
+              <g class="chiptxt" fill="#7aebff" style="font-size:16px"><text x="1310" y="198">Rescue team</text><text x="1360" y="624">Team lead</text><text x="252" y="194">Medical</text><text x="200" y="676">Command post</text></g>
+            </g>
+            <g id="drone" opacity="0"><path d="M0 0 L380 140" stroke="rgba(122,235,255,.0)"/><g id="droneicon"><polygon points="0,-22 24,14 0,4 -24,14" fill="#7aebff"/></g>
+              <g id="dronelab" transform="translate(30 -40)"><rect width="195" height="28" fill="rgba(122,235,255,.12)" stroke="#7aebff"/><text class="chiptxt" x="12" y="19" fill="#7aebff">Drone · overview</text></g></g>
+            <path id="teampath" d="M572 760 L640 720 L760 700 L860 650 L920 560 L960 470 L980 420" fill="none" stroke="#7aebff" stroke-width="2" stroke-dasharray="2 7" stroke-linecap="round" opacity="0"/>
+            <g id="team" opacity="0"><circle r="9" fill="#7aebff"/><circle r="20" fill="url(#gc)"/></g>
+          </svg>
+        </div>
+      </div>
+
+      <svg class="lines" id="lines" aria-hidden="true"></svg>
+      <div class="det cap" id="det" aria-hidden="true"><span class="chip">Person · score ≥ 0.5</span><div class="votes" id="votes"></div></div>
+      <div class="therm cap" id="therm" aria-hidden="true"><span class="chip">Thermal · body heat</span><canvas id="thermcv" width="320" height="240"></canvas></div>
+      <div class="say" id="say" aria-hidden="true"></div>
+
+      <article class="ch" data-ch="0">
+        <h1 class="t big">Searching the rubble before rescuers go in</h1>
+        <div class="b right">A six-legged robot that climbs over collapsed-building rubble and streams live thermal vision, gas readings and a LiDAR map to the team outside, so no rescuer has to crawl into an unstable void to find out who is still alive.<br><button class="pill" type="button" data-jump="1">Scroll to explore <span class="ic">↓</span></button></div>
+      </article>
+      <article class="ch" data-ch="1"><div class="b">Every part has a job: legs to cross rubble, LiDAR to map the space, a thermal camera and a phone to find people.</div></article>
+      <article class="ch" data-ch="2">
+        <h2 class="t">Understanding the Hexapod</h2>
+        <div class="b right">A six-legged search platform that walks into a collapsed structure, looks and listens for survivors, and reports to the team outside.
+          <div class="spec">
+            <div><span>Mobility</span><span>Six legs, tripod gait, three feet always down</span></div>
+            <div><span>Brain</span><span>An Android phone runs the search on its own</span></div>
+            <div><span>Sensing</span><span>Thermal, LiDAR, camera, microphone, gas</span></div>
+            <div><span>Alerts</span><span>Photo, detection, battery and GPS to the team</span></div>
+          </div></div>
+      </article>
+      <article class="ch" data-ch="3">
+        <h2 class="t">Search pattern</h2>
+        <div class="b mid">Walk for 7.2 seconds, stand still and listen for 3, turn for 4.8. Repeat until something answers.<br><button class="pill" type="button" data-jump="4">Start patrol <span class="ic">↓</span></button></div>
+      </article>
+      <article class="ch" data-ch="4"><h2 class="t">Mapping as it walks</h2><div class="b">LiDAR builds the floor plan while the camera and the microphone look and listen.</div></article>
+      <article class="ch" data-ch="5"><h2 class="t">Real-time detection</h2><div class="b">A person counts only when the phone sees them in 5 of the last 8 camera frames. Then the robot stops and turns its torch on.</div></article>
+      <article class="ch" data-ch="6"><h2 class="t">Body heat confirmed</h2><div class="b">The TC01A thermal camera confirms a warm body under the slabs. A person reads 31.5–39.5 °C; hotter objects are flagged as hot surfaces, not people.</div></article>
+      <article class="ch" data-ch="7"><h2 class="t">Contact made</h2><div class="b">Standing still so its own servos stay quiet, it speaks to the survivor and listens for an answer.</div></article>
+      <article class="ch" data-ch="8"><h2 class="t">Search logic</h2><div class="b">The phone runs the search on its own: patrol, investigate, engage, alert. No operator has to watch every second.</div></article>
+      <article class="ch" data-ch="9"><h2 class="t">Confirm before alert</h2><div class="b">A person in 5 of 8 frames, or a voice or knock in 2 of 4 sound clips, counted only while standing still. One noisy frame never raises an alarm.</div></article>
+      <article class="ch" data-ch="10"><h2 class="t">Integrated alerts</h2><div class="b">The alert reaches every phone on the team's alert channel at once: a photo, what it found, its battery and GPS. With no network, it is saved on the phone.</div></article>
+      <article class="ch" data-ch="11"><h2 class="t">Drone, robot, team</h2><div class="b">Drones look from above. Hexapod checks the ground. The team goes in knowing where to look and what the air is like.</div></article>
+      <article class="ch" data-ch="12"><h2 class="t">Survivor located</h2><div class="b">Sense first. Enter safer.</div></article>
+
+      <div class="hud" id="hud" aria-hidden="true"></div>
+      <div class="simtag cap" id="simtag">3D render · from the robot's MuJoCo model</div>
+    </div>
+  </div>
+
+  <section class="sec" id="missions" data-label="Missions">
+    <h2 class="reveal">One robot, many missions.</h2>
+    <div class="cards reveal" id="cards">
+      <article class="card open" tabindex="0">
+        <img src="assets/photos/rubble-30.jpg" alt="The six-legged robot crossing broken concrete in a test" loading="lazy">
+        <div class="txt"><h3>Collapsed buildings</h3><p>In Virar in 2025, narrow lanes kept heavy machinery out of a 38-hour rescue. Hexapod walks into the gaps between slabs and checks for people first.</p><a class="src cap" href="https://indianexpress.com/article/cities/mumbai/38-hr-op-lives-saved-despite-narrow-lanes-unstable-structures-10217451/" target="_blank" rel="noopener">Source · The Indian Express ↗</a></div>
+      </article>
+      <article class="card" tabindex="0">
+        <canvas data-scene="tunnel" aria-label="Illustration in LiDAR style: a tunnel with a heat signature at the far end"></canvas>
+        <div class="txt"><h3>Tunnels and confined spaces</h3><p>In the 2025 Telangana tunnel collapse, drones, sonar and robots were brought in. Hexapod adds a walking scout with LiDAR and a thermal camera.</p><a class="src cap" href="https://indianexpress.com/article/cities/hyderabad/drones-sonars-robots-and-11-agencies-on-the-job-as-clock-ticks-on-telangana-tunnel-rescue-9856348/" target="_blank" rel="noopener">Source · The Indian Express ↗</a></div>
+      </article>
+      <article class="card" tabindex="0">
+        <canvas data-scene="plant" aria-label="Illustration in LiDAR style: an industrial plant with tanks and pipes"></canvas>
+        <div class="txt"><h3>Industrial accidents</h3><p>Gas, temperature and humidity readings on the way in, so the team knows what the air is like before anyone enters.</p><span class="src cap">Illustration · LiDAR style</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="pin" id="system" data-label="System">
+    <div class="inner sys">
+      <div class="sys-head">
+        <p class="cap">How it all connects</p>
+        <h2>From the sensors on the robot to the rescue team's phone.</h2>
+        <p class="sub">Scroll slowly: the system builds up one link at a time.</p>
+      </div>
+      <ol class="flow" id="flow">
+        <li class="node"><span class="n cap">01 · On the robot</span><h3>Sensing layer</h3><ul><li>Thermal camera · TC01A</li><li>LiDAR · RPLIDAR A1</li><li>Gas sensor · MQ series</li><li>Humidity sensor · DHT11</li></ul></li>
+        <li class="node"><span class="n cap">02 · On the robot</span><h3>The phone</h3><ul><li>RGB camera · live video</li><li>eSIM · 4G / 5G uplink</li><li>Control commands to the legs · USB / serial / Bluetooth</li></ul></li>
+        <li class="node"><span class="n cap">03 · Uplink</span><h3>Data leaves the robot</h3><ul><li>Sensor readings</li><li>RGB video</li><li>Robot status</li></ul></li>
+        <li class="node"><span class="n cap">04 · At the site</span><h3>Portable relay station</h3><ul><li>Wi-Fi · 4G · 5G</li><li>Receives data from the robot</li><li>Forwards it to the internet</li><li>Local network for the team</li></ul></li>
+        <li class="node"><span class="n cap">05 · Remote</span><h3>Internet</h3><ul><li>4G · 5G · satellite</li><li>Remote command centres</li></ul></li>
+        <li class="node"><span class="n cap">06 · The team</span><h3>Rescue team app</h3><ul><li>Thermal view</li><li>LiDAR map</li><li>Person detection</li><li>Environment</li></ul></li>
+      </ol>
+      <p class="sys-cap" id="syscap" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="sec robot" id="robot" data-label="The robot">
+    <h2 class="reveal">From a four-legged first prototype to the 18-servo hexapod that walks today.</h2>
+    <div class="protos reveal">
+      <figure><img src="assets/photos/four-leg-build.webp" alt="Prototype 1, the four-legged build, on a ledge" loading="lazy" style="object-position:50% 85%">
+        <figcaption><span class="cap">Prototype 1 · Quadruped</span><span>Where it started. It walked, but rocked and slipped on rubble.</span></figcaption></figure>
+      <figure><img src="assets/photos/prototype2-render.webp" alt="Prototype 2 render: the hexapod with the phone and LiDAR on top" loading="lazy">
+        <figcaption><span class="cap">Prototype 2 · Hexapod</span><span>Three joints per leg, tripod gait, 18 DOF, sensors on top.</span></figcaption></figure>
+    </div>
+    <div class="build-head reveal"><h3>The real build</h3><p>Prototype 2 as it exists today. Select a photo to enlarge.</p></div>
+    <div class="gallery reveal" id="gallery">
+      <button type="button" data-src="assets/photos/six-leg-bench.webp"><img src="assets/photos/six-leg-bench.webp" alt="" loading="lazy" style="object-position:50% 52%"><span>On the bench: RPLIDAR on top, phone inside the grey enclosure, thermal camera window at the front</span></button>
+      <button type="button" data-src="assets/photos/six-leg-top.webp"><img src="assets/photos/six-leg-top.webp" alt="" loading="lazy"><span>Top view: 18 servos, the servo controller board (blue LED) and the RPLIDAR A1</span></button>
+      <button type="button" data-src="assets/photos/floor-test-enclosure.webp"><img src="assets/photos/floor-test-enclosure.webp" alt="" loading="lazy"><span>Floor test with the sensor enclosure fitted</span></button>
+      <button type="button" data-src="assets/photos/floor-walk.webp"><img src="assets/photos/floor-walk.webp" alt="" loading="lazy"><span>Walking on the workshop floor</span></button>
+      <button type="button" data-src="assets/photos/phone-thermal-window.webp"><img src="assets/photos/phone-thermal-window.webp" alt="" loading="lazy"><span>The phone doubles as brain and camera; the thermal window sits beside it</span></button>
+      <button type="button" data-src="assets/photos/gait-tuning.webp"><img src="assets/photos/gait-tuning.webp" alt="" loading="lazy"><span>Gait tuning session with the app and the servo controller</span></button>
+    </div>
+    <dialog class="lb" id="lb"><button class="pill" type="button" id="lbclose">Close <span class="ic">✕</span></button><img id="lbimg" alt=""><p id="lbcap" class="cap"></p></dialog>
+  </section>
+
+  <section class="pin" id="app" data-label="Rescue app">
+    <div class="inner app">
+      <div class="app-copy">
+        <p class="cap">Rescue app · ROBO-DOG</p>
+        <h2>What the team outside the rubble sees, live from the robot.</h2>
+        <div class="apptabs" id="apptabs" role="tablist" aria-label="App screens">
+          <button role="tab" type="button" data-t="0"><b>Home</b><span>Person detection, air quality from the ESP32 and the robot's status on one screen.</span></button>
+          <button role="tab" type="button" data-t="1"><b>Thermal</b><span>Live TC01A view: 256×192 at 9 Hz, ironbow palette, auto-gain. A person reads 31.5–39.5 °C; hotter objects are marked as hot surfaces.</span></button>
+          <button role="tab" type="button" data-t="2"><b>Map</b><span>A live 3D LiDAR map from the RPLIDAR (10 Hz, 240 points a sweep, 4 m range) with the survivor's position and distance.</span></button>
+          <button role="tab" type="button" data-t="3"><b>Logs</b><span>Thermal images, RGB photos, videos and maps the robot captured, kept for the team.</span></button>
+        </div>
+        <p class="cap note">Screens show example values from the team's simulation.</p>
+      </div>
+      <div class="phone" aria-label="ROBO-DOG app screens">
+        <header><b>ROBO-DOG</b><span class="cap ok">● Link OK</span></header>
+        <div class="screens">
+          <div class="scr on" data-s="0">
+            <div class="pc hit"><small class="cap">Person detection</small><div class="big">Survivor detected</div>
+              <dl class="kv"><dt>Body temp</dt><dd>36.4 °C</dd><dt>Distance</dt><dd>1.8 m</dd><dt>Bearing</dt><dd>12° right</dd><dt>Confidence</dt><dd>87%</dd><dt>Movement</dt><dd>yes</dd></dl></div>
+            <div class="pc"><small class="cap">Environment · ESP32</small><div class="okline">All readings normal</div>
+              <div class="gas" id="gasgrid"></div><p class="cap dim">Alarms: methane, explosion risk · hydrogen sulfide · low oxygen · high temperature · high humidity → ALARM, do not enter</p></div>
+            <div class="pc"><small class="cap">Robot status</small>
+              <dl class="kv"><dt>Mode</dt><dd>Hold · survivor</dd><dt>Battery</dt><dd>15.92 V · 75%</dd><dt>Heading</dt><dd>84°</dd><dt>Pitch / roll</dt><dd>2° / 1°</dd><dt>Link</dt><dd>Wi-Fi −52 dBm</dd><dt>Uptime</dt><dd>12:41</dd></dl></div>
+          </div>
+          <div class="scr" data-s="1">
+            <div class="pc"><small class="cap">Live thermal · TC01A</small>
+              <div class="tview"><canvas id="ironbow" width="256" height="192"></canvas><span class="pbox"><i class="cap">Person 87%</i></span><span class="rec cap">● REC 00:42</span></div>
+              <p class="cap dim">IR 256×192 · 9 Hz · Ironbow · auto-gain</p>
+              <dl class="kv"><dt>Spot</dt><dd>36.4 °C</dd><dt>Scene min</dt><dd>21.4 °C</dd><dt>Scene max</dt><dd>36.9 °C</dd></dl></div>
+            <div class="pc"><small class="cap">Person detection</small><dl class="kv"><dt>Body temp</dt><dd>36.4 °C</dd><dt>Body range</dt><dd>31.5 – 39.5 °C</dd></dl>
+              <div class="btns"><span>Capture</span><span>Record</span></div></div>
+          </div>
+          <div class="scr" data-s="2">
+            <div class="pc"><small class="cap">Live LiDAR 3D map</small><canvas id="lidarmap" class="lmap"></canvas>
+              <p class="cap dim">RPLIDAR · 10 Hz · 240 pts · range 4 m · rings 1 m</p>
+              <div class="btns" id="mapbtns"><button type="button" data-a="l">↺ Rotate</button><button type="button" data-a="r">Rotate ↻</button><button type="button" data-a="i">Zoom +</button><button type="button" data-a="o">Zoom −</button><button type="button" data-a="f">Follow: on</button><button type="button" data-a="c">Clear</button></div></div>
+            <div class="pc"><dl class="kv"><dt>Person position</dt><dd>x 1.42 · y 0.86 m</dd><dt>Distance to person</dt><dd>1.7 m</dd></dl></div>
+          </div>
+          <div class="scr" data-s="3">
+            <div class="pc"><small class="cap">Thermal images</small><div class="thumbs"><canvas id="ironbow2" width="256" height="192"></canvas></div><p class="cap dim">10:41:08 · auto · person found</p></div>
+            <div class="pc"><small class="cap">RGB images</small><div class="thumbs"><img src="assets/photos/rubble-16.jpg" alt=""><img src="assets/photos/rubble-30.jpg" alt=""><img src="assets/photos/rubble-52.jpg" alt=""></div></div>
+            <div class="pc"><small class="cap">Videos</small><a class="vrow" href="https://www.youtube.com/watch?v=SoxI9WaMbTk" target="_blank" rel="noopener">Field run · 30 Sep 2026 ↗</a><span class="vrow">Rubble walk · 5 Oct 2026</span></div>
+            <div class="pc"><small class="cap">Maps</small><p class="cap dim">Nothing captured yet</p></div>
+          </div>
+        </div>
+        <nav class="tabbar" id="tabbar"><button type="button" data-t="0">Home</button><button type="button" data-t="1">Thermal</button><button type="button" data-t="2">Map</button><button type="button" data-t="3">Logs</button></nav>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec field" id="field" data-label="Field test">
+    <div class="reveal">
+      <h2>Hexapod has crossed real broken concrete, proving its six legs before the field.</h2>
+      <p class="fdates">Prototype 2 walking under phone control: full run on 30 September 2026, in the team's video. Crossing broken concrete: 5 October 2026, below.</p>
+      <div class="stills">
+        <figure><img src="assets/photos/rubble-6.jpg" alt="Walking up to the rubble" loading="lazy"><figcaption class="cap">00:06</figcaption></figure>
+        <figure><img src="assets/photos/rubble-16.jpg" alt="First feet on the concrete" loading="lazy"><figcaption class="cap">00:16</figcaption></figure>
+        <figure><img src="assets/photos/rubble-30.jpg" alt="Crossing the pile" loading="lazy"><figcaption class="cap">00:30</figcaption></figure>
+        <figure><img src="assets/photos/rubble-52.jpg" alt="Stepping down over slabs" loading="lazy"><figcaption class="cap">00:52</figcaption></figure>
+      </div>
+    </div>
+    <figure class="feed reveal" style="margin:0">
+      <video src="assets/video/rubble-loop.mp4" poster="assets/video/rubble-poster.jpg" autoplay muted loop playsinline aria-label="The real six-legged robot walking over broken concrete"></video>
+      <span class="lab cap l1">Rubble · crossed</span>
+      <span class="lab l cap l2">Six legs · tripod gait</span>
+      <span class="lab cap l3">Power · tethered for tests</span>
+    </figure>
+  </section>
+
+  <section class="sec cta" id="walk" data-label="See it walk">
+    <div class="pic reveal" id="ctapic"><img src="assets/photos/cta-render.webp" alt="3D render of the six-legged robot mid-stride on a rubble field, its torch lighting the ground ahead" loading="lazy" width="2400" height="1500"></div>
+    <div class="reveal">
+      <h2>Autonomy in real rubble</h2>
+      <p>Watch the robot walk in the team's field video, or open the 3D model that every render on this page comes from.</p>
+      <div class="row">
+        <a class="pill" href="https://www.youtube.com/watch?v=SoxI9WaMbTk" target="_blank" rel="noopener">Watch on YouTube <span class="ic">↗</span></a>
+        <a class="pill" href="https://github.com/TANMAY0311/ROBOSIDER-HEXAPOD-3D" target="_blank" rel="noopener">3D model on GitHub <span class="ic">↗</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec marks reveal" data-label="Credits">
+    <div class="grid" aria-label="Programme, research and tools">
+      <span>Smart India Hackathon</span><span>MuJoCo</span><span>Springer Nature</span><span>MediaPipe</span><span>IEEE Xplore</span><span>TensorFlow Lite</span><span>Elsevier</span><span>Android</span><span>Indian Express</span>
+    </div>
+    <p>Built by Team Scammers (Team ID 125847) for Smart India Hackathon 2026, PS SIH26218, Student Innovation: Robotics and Drones. Research, tools and reporting from the sources above.</p>
+  </section>
+
+  <footer class="end" data-label="Contact">
+    <div class="word" aria-hidden="true">Hexapod</div>
+    <div class="bot reveal"><img src="assets/sim/six-leg-cutout.webp" alt="The six-legged robot, rendered from its 3D model" loading="lazy"></div>
+    <div class="bar">
+      <div><h3>Ready to see more?</h3><a class="pill" href="https://www.youtube.com/watch?v=SoxI9WaMbTk" target="_blank" rel="noopener">Watch the video <span class="ic">→</span></a></div>
+      <small class="cap">Hexapod · Prototype 2 · Smart India Hackathon 2026, PS SIH26218 · © Team Scammers</small>
+      <div class="links"><button type="button" data-refs>References</button><a href="https://github.com/TANMAY0311/ROBOSIDER-HEXAPOD-3D" target="_blank" rel="noopener">GitHub</a><a href="https://www.youtube.com/watch?v=SoxI9WaMbTk" target="_blank" rel="noopener">YouTube</a></div>
+    </div>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still) document.documentElement.classList.add("still");
+  const $ = (s) => document.querySelector(s);
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ease = (t) => 1 - Math.pow(1 - clamp(t), 3);
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+
+  /* ---------- chapters: [name, start, end] as fractions of the pinned sequence ---------- */
+  const CH = [
+    ["Intro", 0, .045], ["Specs", .07, .165], ["System", .185, .25], ["Mission", .265, .31], ["Sense", .33, .39],
+    ["Detection", .405, .47], ["Detection", .475, .52], ["Contact", .535, .585], ["Search logic", .635, .70],
+    ["Confirm", .715, .78], ["Alerts", .795, .86], ["Teamwork", .875, .935], ["Status", .95, 1.01]];
+  const SPLIT = .6;                      // the frame sequence plays over [0, SPLIT]; the map takes over after the wipe
+  const WIPE = [.592, .628];
+  const HUD = [
+    [],
+    [["Lidar: RPLIDAR A1 [online]"], ["Thermal: TC01A [online]"], ["Brain: Galaxy M33 [active]"], ["Servos: 18 / 18 [ready]"]],
+    [],
+    [["Boot sequence…"], ["Thermal / lidar / RGB / mic [online]"], ["AI: person + sound models on phone [active]"], ["Link: USC-32 over USB-OTG [established]"], ["Mode: patrol · walk 7.2 s → listen 3 s → turn 4.8 s"]],
+    [["Scan mode: active"], ["RPLIDAR · 10 Hz · 240 pts"], ["Range 4 m · rings 1 m"], ["Mic: listening when still"]],
+    [["Camera: person score ≥ 0.5"], ["Votes: 5 of last 8 frames", "y"], ["Mode: hold · looking at survivor", "y"], ["State: investigate · torch on"]],
+    [["Alert: thermal · body heat", "r"], ["IR 256×192 · 9 Hz · ironbow"], ["Survivor detected · 36.4 °C · 1.8 m · 12° R", "y"], ["Conf 87% · movement seen"]],
+    [["Speaker: calling out"], ["Mic: knock · 2 of 4 clips", "y"], ["Alert: sent to rescue team", "c"]],
+    [["Search area established"], ["Mode: auto patrol"], ["Patrol: walk · listen · turn"]],
+    [["Candidate 1: false alarm"], ["Candidate 2: person 5/8 · knock 2/4", "y"], ["Gas: high near the west wall", "r"]],
+    [["Alert: survivor found", "r"], ["Photo · detection · battery · GPS"], ["Saved on phone: yes"], ["Rescue team notified", "c"]],
+    [["Drone: area overview", "c"], ["Hexapod: ground check done"], ["Team: en route", "c"]],
+    [["Survivor located", "y"], ["Team on site", "c"], ["Risk to rescuers: reduced"]]];
+
+  const seq = $("#seq"), cv = $("#cv"), ctx = cv.getContext("2d"), chap = $("#chap"), hud = $("#hud");
+  const chEls = [...document.querySelectorAll(".ch")];
+  const lines = $("#lines"), det = $("#det"), therm = $("#therm"), say = $("#say"), simtag = $("#simtag");
+  const map = $("#map"), plane = $("#plane");
+  const votes = $("#votes"); for (let i = 0; i < 8; i++) votes.appendChild(document.createElement("i"));
+
+  /* menu */
+  const menu = $("#menu"), burger = $("#burger"), refs = $("#refs"), list = $("#menulist");
+  CH.forEach(([n, a], i) => { if (i && CH[i - 1][0] === n) return; const li = document.createElement("li");
+    li.innerHTML = `<a href="#top" data-jump="${i}"><small>${String(i + 1).padStart(2, "0")}</small>${n}</a>`; list.appendChild(li); });
+  const openMenu = (o) => { menu.hidden = !o; burger.setAttribute("aria-expanded", o); };
+  burger.addEventListener("click", () => openMenu(menu.hidden));
+  document.querySelectorAll("[data-close]").forEach((a) => a.addEventListener("click", () => openMenu(false)));
+  document.querySelectorAll("[data-refs]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); openMenu(false); refs.hidden = false; }));
+  $("#refs-close").addEventListener("click", () => { refs.hidden = true; });
+  addEventListener("keydown", (e) => { if (e.key === "Escape") { openMenu(false); refs.hidden = true; } });
+
+  /* smooth scroll */
+  let lenis = null;
+  if (!still && window.Lenis) { lenis = new Lenis({ lerp: .085, wheelMultiplier: .9 }); const raf = (t) => { lenis.raf(t); requestAnimationFrame(raf); }; requestAnimationFrame(raf); }
+  const seqTop = () => seq.getBoundingClientRect().top + scrollY;
+  const span = () => seq.offsetHeight - innerHeight;
+  const jumpTo = (i) => { const [, a, b] = CH[i]; const y = seqTop() + span() * (a + (b - a) * .3); lenis ? lenis.scrollTo(y, { duration: 2.2 }) : scrollTo({ top: y, behavior: still ? "auto" : "smooth" }); };
+  document.addEventListener("click", (e) => { const j = e.target.closest("[data-jump]"); if (j) { e.preventDefault(); openMenu(false); jumpTo(+j.dataset.jump); } });
+  document.querySelectorAll('a[href^="#"]:not([data-jump]):not([data-refs])').forEach((a) => a.addEventListener("click", (e) => {
+    const el = document.querySelector(a.getAttribute("href")); if (!el || a.getAttribute("href") === "#top") return; e.preventDefault();
+    lenis ? lenis.scrollTo(el, { offset: -40, duration: 1.6 }) : el.scrollIntoView({ behavior: still ? "auto" : "smooth" }); }));
+
+  /* ---------- frames ---------- */
+  let SEQ = null; const rgb = [], scan = {};
+  fetch("assets/seq/seq.json").then((r) => r.json()).then((d) => {
+    SEQ = d;
+    const load = (src) => { const im = new Image(); im.decoding = "async"; im.src = src; im.onload = () => { dirty = true; }; return im; };
+    const order = [...Array(d.frames).keys()];
+    order.sort((a, b) => (a % 8) - (b % 8) || a - b);           // coarse frames first, so scrubbing works early
+    order.forEach((i) => { rgb[i] = load(`assets/seq/rgb_${String(i).padStart(3, "0")}.webp`); });
+    for (let i = d.scan[0]; i <= d.scan[1]; i++) scan[i] = load(`assets/seq/scan_${String(i).padStart(3, "0")}.webp`);
+    dirty = true;
+  });
+  const near = (arr, i) => { for (let k = 0; k < 12; k++) { for (const j of [i - k, i + k]) { const im = arr[j]; if (im && im.complete && im.naturalWidth) return im; } } return null; };
+  let cw = 0, ch = 0, dpr = 1, S = 1, OX = 0, OY = 0;
+  function size() {
+    dpr = Math.min(devicePixelRatio || 1, 2); cw = cv.clientWidth; ch = cv.clientHeight;
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+    S = Math.max(cw / 1280, ch / 720); OX = (cw - 1280 * S) / 2; OY = (ch - 720 * S) / 2;
+    lines.setAttribute("viewBox", `0 0 ${cw} ${ch}`); dirty = true;
+  }
+  const px = (p) => [OX + p[0] * 1280 * S, OY + p[1] * 720 * S];
+  function drawImg(im, a = 1) { if (!im) return; ctx.globalAlpha = a; ctx.drawImage(im, OX * dpr, OY * dpr, 1280 * S * dpr, 720 * S * dpr); ctx.globalAlpha = 1; }
+
+  /* ---------- per-scroll update ---------- */
+  let dirty = true, lastP = -1;
+  const hudText = (i, k) => {
+    const L = HUD[i]; let out = "";
+    L.forEach(([s, c], j) => { const n = Math.floor(clamp(k * 2.4 - j * .32) * s.length); if (n > 0) out += `<span class="${c || ""}">${s.slice(0, n).toUpperCase()}</span>\n`; });
+    return out;
+  };
+  function vis(i, P) { const [, a, b] = CH[i], d = (b - a) * .14; return Math.min(i ? smooth(a - d * .2, a + d, P) : 1, 1 - smooth(b - d, b + d * .2, P)); }
+  function setEl(el, v) { el.style.opacity = v; el.style.transform = `translateY(${(1 - v) * 14}px)`; el.style.filter = v > .99 ? "none" : `blur(${(1 - v) * 8}px)`; }
+
+  function update() {
+    const P = clamp((scrollY - seqTop()) / span());
+    if (!dirty && Math.abs(P - lastP) < 1e-5) return; dirty = false; lastP = P;
+    const cur = CH.reduce((best, c, i) => (P >= c[1] - .012 ? i : best), 0);
+    const label = P >= 1 && secLabel ? secLabel : CH[cur][0];
+    if (chap.textContent !== label) chap.textContent = label;
+
+    /* frames */
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#06070a"; ctx.fillRect(0, 0, cv.width, cv.height);
+    let fi = 0;
+    if (SEQ) {
+      fi = Math.round(clamp(P / SPLIT) * (SEQ.frames - 1));
+      drawImg(near(rgb, fi));
+      const sa = Math.min(smooth(.318, .336, P), 1 - smooth(.392, .41, P));
+      if (sa > 0 && fi >= SEQ.scan[0] && fi <= SEQ.scan[1]) drawImg(near(scan, fi), sa);
+    }
+    const mapTag = P > WIPE[0];
+    if (simtag.dataset.m !== String(mapTag)) { simtag.dataset.m = mapTag; simtag.textContent = mapTag ? "Illustration · how a search plays out" : "3D render · from the robot's MuJoCo model"; }
+    simtag.style.opacity = mapTag ? smooth(WIPE[1], WIPE[1] + .02, P) * .8 : 1 - smooth(.04, .07, P);
+
+    /* chapter text */
+    chEls.forEach((el, i) => { const v = vis(i, P); el.style.visibility = v > 0.001 ? "visible" : "hidden"; el.querySelectorAll(".t, .b").forEach((x) => setEl(x, v)); });
+    const k = clamp((P - CH[cur][1]) / (CH[cur][2] - CH[cur][1]));
+    hud.innerHTML = vis(cur, P) > .05 ? hudText(cur, k) : "";
+    hud.style.opacity = vis(cur, P);
+
+    /* callouts (Specs) */
+    const tr = SEQ && SEQ.track[fi];
+    let svg = "";
+    const vs = vis(1, P);
+    if (tr && vs > 0) {
+      const items = [["lidar", "RPLIDAR A1", "10 Hz · 240 pts · 4 m", 1, -80], ["phone", "Phone brain", "On-device AI · 4G / 5G", 1, 40], ["thermal", "Thermal camera", "TC01A · 256×192 · 9 Hz", -1, -30], ["leg", "18 servos", "18 DOF · tripod gait", -1, 100]];
+      const narrow = cw < 720;
+      items.forEach(([key, a, b, side, dy], j) => {
+        if (narrow && j > 1) return;
+        const [x, y] = px(tr[key]); if (narrow) side = x > cw / 2 ? -1 : 1;   // phones: put the label where there is room
+        const lx = clamp(x + side * (narrow ? 70 : 230), 16, cw - 16), ly = clamp(y + dy * (narrow ? .6 : 1), 90, ch - 120);
+        const ex = lx - side * 30, len = Math.hypot(ex - x, ly - y) + 40;
+        const draw = ease((vs - j * .12) / .7);
+        svg += `<g opacity="${clamp(vs * 1.4)}"><circle cx="${x}" cy="${y}" r="3.5" fill="#fff"/><circle cx="${x}" cy="${y}" r="9" fill="none" stroke="rgba(255,255,255,.4)"/>
+          <path d="M${x} ${y} L${ex} ${ly} L${lx} ${ly}" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1" stroke-dasharray="${len}" stroke-dashoffset="${len * (1 - draw)}"/>
+          <text x="${lx + side * 8}" y="${ly - 4}" text-anchor="${side > 0 ? "start" : "end"}" opacity="${draw}">${a}</text>
+          <text class="sub" x="${lx + side * 8}" y="${ly + 12}" text-anchor="${side > 0 ? "start" : "end"}" opacity="${draw}">${b}</text></g>`;
+      });
+    }
+    /* thermal beam (chapter 6) */
+    const vt = vis(6, P);
+    if (tr && vt > 0 && tr.robot) {
+      const r = therm.getBoundingClientRect(), [x, y] = px(tr.robot);
+      svg += `<polygon points="${x},${y} ${r.left},${r.top} ${r.left},${r.bottom}" fill="rgba(255,255,255,${.12 * vt})"/>`;
+    }
+    lines.innerHTML = svg;
+
+    /* detection box (chapter 5) */
+    const vd = vis(5, P);
+    if (tr && tr.person && vd > 0) {
+      const [x, y] = px(tr.person), w = 170 * S, h = 120 * S;
+      det.style.transform = `translate(${x - w / 2}px, ${y - h * .55}px)`; det.style.width = w + "px"; det.style.height = h + "px"; det.style.opacity = vd;
+      const n = Math.min(5, Math.floor(clamp((P - CH[5][1]) / ((CH[5][2] - CH[5][1]) * .55)) * 5.99));
+      [...votes.children].forEach((c, i) => c.classList.toggle("on", i < n));
+    } else det.style.opacity = 0;
+    therm.style.opacity = vt;
+    if (vt > 0) drawTherm(tr);
+
+    /* speech (chapter 7) */
+    const vc = vis(7, P);
+    if (tr && tr.robot && vc > 0) {
+      const [x, y] = px(tr.robot); const msg = "“Rescue team is on the way. If you can hear me, call out or knock twice.”";
+      const n = Math.floor(clamp(((P - CH[7][1]) / (CH[7][2] - CH[7][1])) * 1.8) * msg.length);
+      say.textContent = msg.slice(0, Math.max(1, n)); say.style.opacity = vc;
+      say.style.transform = `translate(${clamp(x + 40, 16, cw - 380)}px, ${clamp(y - 160, 80, ch - 200)}px)`;
+    } else say.style.opacity = 0;
+
+    /* map: diagonal wipe, then camera moves per chapter */
+    const w = smooth(WIPE[0], WIPE[1], P);
+    if (w <= 0) map.style.visibility = "hidden";
+    else {
+      map.style.visibility = "visible";
+      const a = 160 - 160 * w;             // the wipe edge runs from (a%, top) to (a - 60%, bottom)
+      map.style.clipPath = w >= 1 ? "none" : `polygon(${a}% 0, 220% 0, 220% 100%, ${a - 60}% 100%)`;
+      mapUpdate(P);
+    }
+  }
+
+  /* tactical map */
+  const MK = [ // P, scale, x, y, rotateX
+    [.60, .9, 0, 40, 52], [.70, 1.05, -40, 30, 50], [.75, 1.35, -220, 120, 46], [.82, .78, -20, 20, 50], [.90, .95, 60, 30, 48], [1, 1.0, -40, 40, 50]];
+  const robot = $("#maprobot"), patrol = $("#patrol"), plen = patrol.getTotalLength();
+  const teampath = $("#teampath"), tlen = teampath.getTotalLength(), team = $("#team");
+  const g = (id) => document.getElementById(id);
+  function lerpKeys(P) {
+    let i = 0; while (i < MK.length - 2 && P > MK[i + 1][0]) i++;
+    const [p0, ...a] = MK[i], [p1, ...b] = MK[i + 1], t = smooth(p0, p1, P);
+    return a.map((v, k) => v + (b[k] - v) * t);
+  }
+  function mapUpdate(P) {
+    const [s, x, y, rx] = lerpKeys(P), fit = Math.max(Math.min(innerWidth / 1500, innerHeight / 900) * 1.4, innerWidth / 900);
+    plane.style.transform = `perspective(1400px) translate(${x * fit}px, ${y * fit}px) rotateX(${rx}deg) scale(${s * fit})`;
+    // robot patrols along the path during Search logic, then stays near the survivor
+    const t = smooth(.62, .70, P) * .82 + smooth(.70, .76, P) * .18, pt = patrol.getPointAtLength(plen * t), pt2 = patrol.getPointAtLength(Math.min(plen, plen * t + 2));
+    robot.setAttribute("transform", `translate(${pt.x} ${pt.y}) rotate(${Math.atan2(pt2.y - pt.y, pt2.x - pt.x) * 57.3 + 90})`);
+    g("rings").style.opacity = vis(8, P);
+    g("false").style.opacity = Math.min(smooth(.70, .73, P), 1 - smooth(.77, .80, P));
+    g("surv").style.opacity = smooth(.715, .74, P);
+    g("survtxt").textContent = P > .945 ? "Survivor · located" : "Survivor · confirmed";
+    g("gas").style.opacity = smooth(.74, .77, P);
+    g("resp").style.opacity = Math.min(smooth(.80, .83, P), 1 - smooth(.93, .95, P) * .6);
+    g("entry").style.opacity = smooth(.875, .9, P);
+    const vd = smooth(.875, .9, P), dt = smooth(.875, .93, P);
+    g("drone").style.opacity = vd * (1 - smooth(.955, .98, P));
+    g("droneicon").setAttribute("transform", `translate(${300 + 640 * dt} ${180 + 90 * dt}) rotate(68)`);
+    g("dronelab").setAttribute("transform", `translate(${330 + 640 * dt} ${130 + 90 * dt})`);
+    teampath.style.opacity = smooth(.9, .92, P); teampath.style.strokeDashoffset = 0;
+    const tt = smooth(.91, .985, P), tp = teampath.getPointAtLength(tlen * tt);
+    team.style.opacity = smooth(.9, .92, P); team.setAttribute("transform", `translate(${tp.x} ${tp.y})`);
+    g("area").setAttribute("stroke", P > .95 ? "rgba(122,235,255,.9)" : "rgba(255,255,255,.85)");
+  }
+
+  /* thermal thumbnail: a crop of the LiDAR-style frame round the survivor */
+  const tcx = $("#thermcv").getContext("2d");
+  function drawTherm(tr) {
+    const im = near(scan, SEQ ? SEQ.scan[1] : 0), last = SEQ && SEQ.track[SEQ.scan[1]];
+    if (!im || !last || !last.person) return;
+    const [nx, ny] = last.person, w = im.naturalWidth, h = im.naturalHeight, cwid = w * .22, chei = cwid * .75;
+    tcx.fillStyle = "#000"; tcx.fillRect(0, 0, 320, 240);
+    tcx.drawImage(im, nx * w - cwid / 2, ny * h - chei / 2, cwid, chei, 0, 0, 320, 240);
+  }
+
+  /* LiDAR-style cards */
+  const rng = (seed) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  function box(P, r, cx, cy, cz, sx, sy, sz, ry, n) { const c = Math.cos(ry), s = Math.sin(ry);
+    for (let i = 0; i < n; i++) { const f = Math.floor(r() * 6), u = r() * 2 - 1, v = r() * 2 - 1;
+      const x = [1, -1, u, u, u, u][f] * sx, y = [u, u, 1, -1, v, v][f] * sy, z = [v, v, v, v, 1, -1][f] * sz; P.push([cx + x * c - z * s, cy + y, cz + x * s + z * c, 0]); } }
+  function build(kind) {
+    const r = rng(kind.length * 977), P = [];
+    for (let i = 0; i < 900; i++) P.push([(r() - .5) * 4.4, -1, (r() - .5) * 4.4, 0]);
+    if (kind === "tunnel") {
+      for (let i = 0; i < 4200; i++) { const a = Math.PI * r(), z = (r() - .5) * 4.2; P.push([Math.cos(a) * 1.05, -1 + Math.sin(a) * 1.25, z, 0]); }
+      box(P, r, .4, -.8, 1.2, .3, .2, .4, .4, 200); for (let i = 0; i < 110; i++) P.push([-.25 + (r() - .5) * .25, -.85 + (r() - .5) * .12, 1.55 + (r() - .5) * .5, 1]);
+    } else {
+      for (let i = 0; i < 1600; i++) { const a = r() * 6.283; P.push([-1 + Math.cos(a) * .55, -1 + r() * 1.9, .6 + Math.sin(a) * .55, 0]); }
+      for (let i = 0; i < 1000; i++) { const a = r() * 6.283; P.push([.2 + Math.cos(a) * .4, -1 + r() * 1.4, .9 + Math.sin(a) * .4, 0]); }
+      for (let i = 0; i < 900; i++) P.push([-1.6 + r() * 3.2, .25 + (r() - .5) * .08, -.6 + (r() - .5) * .08, 0]);
+      box(P, r, 1.2, -.6, .9, .45, .4, .35, .3, 700);
+    }
+    return P;
+  }
+  document.querySelectorAll("canvas[data-scene]").forEach((c) => {
+    const P = build(c.dataset.scene), x = c.getContext("2d"); let on = false, t0 = performance.now();
+    const fit = () => { const d = Math.min(devicePixelRatio || 1, 2); c.width = c.clientWidth * d; c.height = c.clientHeight * d; };
+    const draw = (t) => { const w = c.width, h = c.height, a = .5 + (still ? 0 : (t - t0) / 9000), co = Math.cos(a), si = Math.sin(a), f = Math.min(w, h * 1.4) * 1.05;
+      x.fillStyle = "#0d1014"; x.fillRect(0, 0, w, h);
+      for (const [X0, Y0, Z0, hot] of P) { const X = X0 * co - Z0 * si, Z = X0 * si + Z0 * co + 5.4, Y = Y0 * .96 - .12 * Z + .45;
+        const sx = w / 2 + X * f / Z, sy = h * .45 - Y * f / Z, k = Math.max(.12, Math.min(1, 1.75 - Z / 5));
+        x.globalAlpha = hot ? .95 : k * .85; x.fillStyle = hot ? "#ffcb47" : "#7aebff"; const sz = (hot ? 2.6 : 1.5) * (w / 640); x.fillRect(sx, sy, sz, sz); }
+      x.globalAlpha = 1; };
+    const loop = (t) => { if (on) { draw(t); requestAnimationFrame(loop); } };
+    fit(); draw(t0); new ResizeObserver(() => { fit(); draw(performance.now()); }).observe(c);
+    if (!still) new IntersectionObserver(([e]) => { const was = on; on = e.isIntersecting; if (on && !was) requestAnimationFrame(loop); }).observe(c);
+  });
+  const cards = [...document.querySelectorAll(".card")];
+  cards.forEach((c) => { const open = () => cards.forEach((k) => k.classList.toggle("open", k === c)); c.addEventListener("mouseenter", open); c.addEventListener("focus", open); c.addEventListener("click", open); });
+
+  /* section label for the nav, and play videos only while they are on screen */
+  let secLabel = "";
+  const lab = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { secLabel = e.target.dataset.label; dirty = true; } }), { rootMargin: "-45% 0px -45% 0px" });
+  document.querySelectorAll("[data-label]").forEach((el) => lab.observe(el));
+  const vio = new IntersectionObserver((es) => es.forEach((e) => { const v = e.target; if (e.isIntersecting && !still) v.play().catch(() => {}); else v.pause(); }), { threshold: .1 });
+  document.querySelectorAll("video[autoplay]").forEach((v) => vio.observe(v));
+
+  /* reveals */
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .2 });
+  document.querySelectorAll(".reveal, #ctapic").forEach((el) => io.observe(el));
+
+
+  /* ---------- How it all connects: one link at a time ---------- */
+  const sysSec = $("#system"), nodes = [...document.querySelectorAll("#flow .node")], syscap = $("#syscap");
+  const SYSCAP = ["<b>1</b> · Sensing layer on the robot: thermal camera, LiDAR, gas and humidity sensors",
+    "<b>2</b> · The phone on the robot: RGB video, control commands to the legs, 4G/5G uplink",
+    "<b>3</b> · Data leaves the robot: sensor readings, video and robot status",
+    "<b>4</b> · Portable relay station at the site: local Wi-Fi for the team, 4G/5G uplink",
+    "<b>5</b> · Internet: 4G, 5G or satellite for remote command centres",
+    "<b>6</b> · The rescue team's app: thermal, LiDAR map, person detection, environment"];
+  let sysStep = -2;
+  function sysUpdate() {
+    const r = sysSec.getBoundingClientRect(), p = clamp(-r.top / Math.max(1, r.height - innerHeight));
+    const k = innerWidth <= 640 ? 5 : Math.min(5, Math.floor(p * 6.4 - .2));
+    if (k === sysStep) return; sysStep = k;
+    nodes.forEach((n, i) => { n.classList.toggle("on", i <= k); n.classList.toggle("cur", i === k); });
+    syscap.innerHTML = k >= 0 ? SYSCAP[k] : "";
+  }
+
+  /* ---------- ROBO-DOG app: the screen follows the scroll; tabs jump to it ---------- */
+  const appSec = $("#app"), tabEls = [...document.querySelectorAll("#apptabs button")], barEls = [...document.querySelectorAll("#tabbar button")], scrs = [...document.querySelectorAll(".scr")];
+  let appTab = -1;
+  function setTab(t) {
+    if (t === appTab) return; appTab = t;
+    tabEls.forEach((b, i) => b.setAttribute("aria-selected", i === t)); barEls.forEach((b, i) => b.classList.toggle("on", i === t));
+    scrs.forEach((x, i) => x.classList.toggle("on", i === t));
+  }
+  function appUpdate() {
+    if (innerWidth <= 860) { if (appTab < 0) setTab(0); return; }
+    const r = appSec.getBoundingClientRect(), p = clamp(-r.top / Math.max(1, r.height - innerHeight)); setTab(Math.min(3, Math.floor(p * 4)));
+  }
+  const goTab = (t) => {
+    if (innerWidth <= 860) { setTab(t); return; }
+    const y = appSec.getBoundingClientRect().top + scrollY + (appSec.offsetHeight - innerHeight) * ((t + .5) / 4);
+    lenis ? lenis.scrollTo(y, { duration: 1.2 }) : scrollTo({ top: y, behavior: still ? "auto" : "smooth" });
+  };
+  [...tabEls, ...barEls].forEach((b) => b.addEventListener("click", () => goTab(+b.dataset.t)));
+  const GAS = [["Carbon monoxide", "ppm", 12, 100, 25, 35], ["Methane", "%LEL", 2, 25, 5, 10], ["Hydrogen sulfide", "ppm", 1.2, 15, 5, 10],
+    ["Oxygen", "%", 20.8, 25, 20.3, 19.5], ["Temperature", "°C", 31.5, 60, 35, 45], ["Humidity", "%", 64, 100, 80, 90]];
+  $("#gasgrid").innerHTML = GAS.map(([n, u, v, max, w, a]) => {
+    const ox = n === "Oxygen", lvl = ox ? (v < a ? 2 : v < w ? 1 : 0) : (v >= a ? 2 : v >= w ? 1 : 0);
+    return `<div><small>${n}</small><b>${v}<u>${u}</u></b><i><em class="${["", "w", "d"][lvl]}" style="width:${Math.min(100, v / max * 100)}%"></em></i><span>${ox ? `warn &lt; ${w} · alarm &lt; ${a}` : `warn ${w} · alarm ${a}`}</span></div>`;
+  }).join("");
+  function ironbow(c) {   /* an ironbow thermal frame: cool rubble, a warm body (example, drawn in code) */
+    const x = c.getContext("2d"), W = 256, H = 192, img = x.createImageData(W, H), r = rng(42);
+    const stops = [[0, [0, 0, 12]], [.25, [78, 0, 118]], [.45, [188, 30, 92]], [.65, [240, 110, 22]], [.85, [255, 200, 44]], [1, [255, 250, 222]]];
+    const lut = (v) => { for (let i = 1; i < stops.length; i++) if (v <= stops[i][0]) { const [a, ca] = stops[i - 1], [b, cb] = stops[i], t = (v - a) / (b - a); return ca.map((q, k) => q + (cb[k] - q) * t); } return stops[5][1]; };
+    const blob = (px, py, cx, cy, sx, sy, a) => a * Math.exp(-(((px - cx) / sx) ** 2 + ((py - cy) / sy) ** 2));
+    for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) {
+      const t = 21.5 + 1.6 * Math.sin(xx * .05 + yy * .03) + (r() - .5) * .9 + blob(xx, yy, 128, 72, 17, 19, 15) + blob(xx, yy, 128, 126, 30, 40, 12.5)
+        + blob(xx, yy, 90, 112, 30, 9, 10.5) + blob(xx, yy, 170, 165, 60, 14, -2.5);
+      const c3 = lut(clamp((t - 20) / 18)), o = (yy * W + xx) * 4; img.data[o] = c3[0]; img.data[o + 1] = c3[1]; img.data[o + 2] = c3[2]; img.data[o + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+  }
+  ["#ironbow", "#ironbow2"].forEach((q) => ironbow($(q)));
+  const lm = $("#lidarmap"), lx = lm.getContext("2d"), lv = { a: .6, z: 1, follow: true, pts: true };
+  const LP = (() => { const r = rng(7), P = [];
+    for (let i = 0; i < 1440; i++) { const a = r() * 6.283, rad = 3.2 + (r() - .5) * .25 + .6 * Math.sin(a * 3); P.push([Math.cos(a) * rad, Math.sin(a) * rad, r() * 1.4, 0]); }
+    for (let k = 0; k < 9; k++) { const cx = (r() - .5) * 4, cy = (r() - .5) * 4; for (let i = 0; i < 60; i++) P.push([cx + (r() - .5) * .5, cy + (r() - .5) * .4, r() * .3, 0]); }
+    for (let i = 0; i < 70; i++) P.push([1.42 + (r() - .5) * .35, .86 + (r() - .5) * .6, r() * .25, 1]);
+    return P; })();
+  function drawMap() {
+    const d = Math.min(devicePixelRatio || 1, 2), w = Math.round(lm.clientWidth * d), h = Math.round(lm.clientHeight * d);
+    if (!w || !h) return; if (lm.width !== w) { lm.width = w; lm.height = h; }
+    lx.fillStyle = "#06070a"; lx.fillRect(0, 0, w, h);
+    const s = w / 9 * lv.z, c = Math.cos(lv.a), si = Math.sin(lv.a), tilt = .55, P2 = (x, y, z) => { const X = x * c - y * si, Y = x * si + y * c; return [w / 2 + X * s, h / 2 + Y * s * tilt - z * s * .9]; };
+    lx.strokeStyle = "rgba(122,235,255,.2)"; lx.lineWidth = d;
+    for (let k = 1; k <= 4; k++) { lx.beginPath(); lx.ellipse(w / 2, h / 2, k * s, k * s * tilt, 0, 0, 6.283); lx.stroke(); }
+    if (lv.pts) for (const [x, y, z, hot] of LP) { const [X, Y] = P2(x, y, z); lx.fillStyle = hot ? "#ffcb47" : `hsl(${Math.round(225 - 225 * Math.min(1, z / 1.4))},85%,55%)`; lx.fillRect(X, Y, 1.6 * d, 1.6 * d); }
+    lx.fillStyle = "#fff"; lx.beginPath(); lx.arc(w / 2, h / 2, 4 * d, 0, 6.283); lx.fill();
+    const [px, py] = P2(1.42, .86, .3); lx.strokeStyle = "#ffcb47"; lx.strokeRect(px - 14 * d, py - 18 * d, 28 * d, 30 * d);
+    lx.fillStyle = "#ffcb47"; lx.font = `${9 * d}px "Geist Mono", monospace`; lx.fillText("PERSON · 1.7 m", px - 14 * d, py - 22 * d);
+  }
+  $("#mapbtns").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return;
+    ({ l: () => lv.a -= .35, r: () => lv.a += .35, i: () => lv.z = Math.min(2.5, lv.z * 1.2), o: () => lv.z = Math.max(.5, lv.z / 1.2),
+       f: () => { lv.follow = !lv.follow; b.textContent = lv.follow ? "Follow: on" : "Follow: off"; }, c: () => { lv.pts = !lv.pts; b.textContent = lv.pts ? "Clear" : "Show"; } })[b.dataset.a](); drawMap(); });
+
+  /* ---------- the real build: enlarge a photo ---------- */
+  const lb = $("#lb"), lbimg = $("#lbimg"), lbcap = $("#lbcap");
+  document.querySelectorAll("#gallery button").forEach((b) => b.addEventListener("click", () => {
+    const t = b.querySelector("span").textContent; lbimg.src = b.dataset.src; lbimg.alt = t; lbcap.textContent = t;
+    if (lb.showModal) lb.showModal(); else lb.setAttribute("open", ""); }));
+  $("#lbclose").addEventListener("click", () => lb.close());
+  lb.addEventListener("click", (e) => { if (e.target === lb) lb.close(); });
+
+  size(); addEventListener("resize", size);
+  const tick = () => {
+    update(); sysUpdate(); appUpdate();
+    if (appTab === 2) { if (lv.follow && !still) lv.a += .0025; drawMap(); }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})();
+</script>
+
+</body>
+</html>
